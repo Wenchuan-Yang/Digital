@@ -1,0 +1,4 @@
+*.pth
+*.pkl
+*pk1
+*/checkpoints/*

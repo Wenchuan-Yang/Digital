@@ -2,3 +2,4 @@
 *.pkl
 *pk1
 */checkpoints/*
+*/__pycache__/*

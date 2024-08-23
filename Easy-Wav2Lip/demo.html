@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>语音到视频转换</title>
+</head>
+<body>
+    <!-- 文件选择按钮 -->
+    <input type="file" id="audioInput" accept="audio/*">
+
+    <!-- 发送文件按钮 -->
+    <button id="sendFileButton" disabled>发送文件</button>
+
+    <!-- 开始录音按钮 -->
+    <button id="startRecord">开始录音</button>
+    
+    <!-- 停止录音按钮 -->
+    <button id="stopRecord">停止录音</button>
+    
+    <!-- 用于播放生成视频的video标签 -->
+    <video id="videoPlayer" controls></video>
+
+    <script>
+        let socket = null;
+        let audioRecorder = null;
+        let mediaStream = null;
+        let videoChunks = [];
+        let currentIndex = 0;
+        let selectedFile = null;
+
+        // 文件选择按钮触发的事件
+        document.getElementById('audioInput').addEventListener('change', function(event) {
+            selectedFile = event.target.files[0];
+            if (selectedFile) {
+                document.getElementById('sendFileButton').disabled = false;
+            }
+        });
+
+        // 发送文件按钮触发的事件
+        document.getElementById('sendFileButton').addEventListener('click', function() {
+            if (selectedFile) {
+                // 创建WebSocket连接
+                socket = new WebSocket('ws://44.204.196.182:8000/ws');
+
+                socket.onopen = function(event) {
+                    console.log('WebSocket is open now.');
+                    sendAudioFile(selectedFile);
+                };
+
+                socket.onmessage = function(event) {
+                    const videoBlob = new Blob([event.data], { type: 'video/mp4' });
+                    videoChunks.push(videoBlob);
+                    if (currentIndex === videoChunks.length - 1) {
+                        playNextChunk();
+                    }
+                };
+            }
+        });
+
+        // 发送音频文件到服务器
+        function sendAudioFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(arrayBuffer);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 当用户点击“开始录音”按钮时触发此函数
+        document.getElementById('startRecord').addEventListener('click', function() {
+            console.log("触发了<开始录音>按钮");
+
+            // 创建WebSocket连接
+            socket = new WebSocket('ws://44.204.196.182:8000/ws');
+
+            socket.onopen = function(event) {
+                console.log('WebSocket is open now.');
+            };
+
+            socket.onmessage = function(event) {
+                const videoBlob = new Blob([event.data], { type: 'video/mp4' });
+                videoChunks.push(videoBlob);
+                if (currentIndex === videoChunks.length - 1) {
+                    playNextChunk();
+                }
+            };
+
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function(stream) {
+                    mediaStream = stream;
+                    audioRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm; codecs=opus' });
+
+                    audioRecorder.ondataavailable = function(e) {
+                        if (e.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
+                            socket.send(e.data);
+                        }
+                    };
+
+                    audioRecorder.start(1000*5);  // 设置timeslice为1000毫秒
+                })
+                .catch(function(err) {
+                    console.error('Error accessing microphone: ', err);
+                });
+        });
+
+        // 当用户点击“停止录音”按钮时触发此函数
+        document.getElementById('stopRecord').addEventListener('click', function() {
+            if (audioRecorder && audioRecorder.state === 'recording') {
+                audioRecorder.stop();
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(function(track) {
+                    track.stop();
+                });
+            }
+
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+
+            console.log("Recording stopped and WebSocket closed.");
+        });
+
+        // 播放下一个视频片段
+        function playNextChunk() {
+            if (currentIndex < videoChunks.length) {
+                const videoUrl = URL.createObjectURL(videoChunks[currentIndex]);
+                const videoPlayer = document.getElementById('videoPlayer');
+                
+                videoPlayer.onended = function() {
+                    currentIndex++;
+                    playNextChunk();
+                };
+
+                videoPlayer.src = videoUrl;
+                videoPlayer.play();
+            }
+        }
+    </script>
+</body>
+</html>

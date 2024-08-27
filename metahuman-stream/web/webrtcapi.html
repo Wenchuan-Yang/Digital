@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- 设置文档的字符编码为 UTF-8，以支持多语言字符集 -->
+    <meta charset="UTF-8"/>
+    <!-- 设置视口属性，使页面在移动设备上能够自适应显示 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 设置页面标题 -->
+    <title>WebRTC webcam</title>
+    <!-- 内联CSS样式 -->
+    <style>
+    button {
+        padding: 8px 16px; /* 设置按钮的内边距 */
+    }
+
+    video {
+        width: 100%; /* 设置视频元素的宽度为父元素的100% */
+    }
+    .option {
+        margin-bottom: 8px; /* 为选项元素设置底部外边距 */
+    }
+
+    #media {
+        max-width: 1280px; /* 设置媒体容器的最大宽度为1280像素 */
+    }
+    </style>
+</head>
+
+<body>
+<!-- 一个容器，包含用于选择是否使用STUN服务器的复选框 -->
+<div class="option">
+  <input id="use-stun" type="checkbox" checked/> <!-- 复选框，默认选中 -->
+  <label for="use-stun">Use STUN server</label> <!-- 复选框的标签 -->
+</div>
+
+
+<!-- 开始按钮，点击时触发start()函数 -->
+<button id="start" onclick="start()">Start</button>
+<!-- 停止按钮，点击时触发stop()函数，初始状态下隐藏 -->
+<button id="stop" style="display: none" onclick="stop()">Stop</button>
+
+<!-- 隐藏输入字段，用于存储会话ID -->
+<input type="hidden" id="sessionid" value="0">
+
+<!-- 表单，用于发送文本消息 -->
+<form class="form-inline" id="echo-form">
+    <div class="form-group">
+      <p>input text</p> <!-- 文本框前的描述 -->
+      <!-- 文本输入区域，设置宽度和高度 -->
+      <textarea cols="2" rows="3" style="width:600px;height:50px;" class="form-control" id="message">test</textarea>
+    </div>
+    <!-- 发送按钮，点击时提交表单 -->
+    <button type="submit" class="btn btn-default">Send->发送</button>
+</form>
+
+<!-- 媒体容器，显示音频和视频 -->
+<div id="media">
+    <h2>Media</h2> <!-- 媒体标题 -->
+
+    <!-- 自动播放的音频元素 -->
+    <audio id="audio" autoplay="true"></audio>
+    <!-- 自动播放且内联播放（避免全屏）的视频元素 -->
+    <video id="video" style="width:600px;" autoplay="true" playsinline="true"></video>
+</div>
+
+<!-- 引入外部 JavaScript 文件 client.js -->
+<script src="client.js"></script>
+<!-- 引入 SockJS 库，用于 WebSocket 通信 -->
+<script type="text/javascript" src="http://cdn.sockjs.org/sockjs-0.3.4.js"></script>
+<!-- 引入 jQuery 库，用于简化 DOM 操作和事件处理 -->
+<script type="text/javascript" src="https://ajax.aspnetcdn.com/ajax/jquery/jquery-2.1.1.min.js"></script>
+</body>
+
+<script type="text/javascript" charset="utf-8">
+
+	// 当文档加载完成时执行
+	$(document).ready(function() {
+	  // 之前代码中 WebSocket 连接的部分已被注释掉
+	  // 你可以取消注释以启用 WebSocket 连接
+	  
+	  // var host = window.location.hostname
+	  // var ws = new WebSocket("ws://"+host+":8000/humanecho");
+	  // //当 WebSocket 连接打开时触发
+	  // ws.onopen = function() {
+		// console.log('Connected'); // 在控制台输出连接成功的信息
+	  // };
+	  
+	  // // 当收到 WebSocket 消息时触发
+	  // ws.onmessage = function(e) {
+		// console.log('Received: ' + e.data); // 在控制台输出收到的消息数据
+		// data = e; // 将收到的数据存储在 data 变量中
+		// var vid = JSON.parse(data.data); // 将收到的 JSON 字符串解析为 JavaScript 对象
+		// console.log(typeof(vid), vid); // 输出数据类型和内容到控制台
+
+		// //document.getElementsByTagName("video")[0].setAttribute("src", vid["video"]);
+	  // };
+	  
+	  // // 当 WebSocket 连接关闭时触发
+	  // ws.onclose = function(e) {
+		// console.log('Closed'); // 在控制台输出连接关闭的信息
+	  // };
+
+	  // 监听表单提交事件
+	  $('#echo-form').on('submit', function(e) {
+      e.preventDefault(); // 阻止表单的默认提交行为，防止页面刷新
+      var message = $('#message').val(); // 获取文本框中的消息内容
+      console.log('Sending: ' + message); // 在控制台输出发送的消息
+      console.log('sessionid: ', document.getElementById('sessionid').value); // 在控制台输出当前的 sessionid
+
+      // 使用 fetch API 向服务器发送 POST 请求
+      fetch('/human', {
+            body: JSON.stringify({
+                text: message, // 发送的消息文本
+                type: 'echo', // 消息类型（在此例中为 'echo'）
+                interrupt: false, // 指示是否中断之前的操作
+                sessionid: parseInt(document.getElementById('sessionid').value), // 当前会话ID，转为整数
+            }),
+            headers: {
+                'Content-Type': 'application/json' // 设置请求头，指示内容类型为 JSON
+            },
+            method: 'POST' // 指定请求方法为 POST
+      });
+
+      // ws.send(message); // 之前的 WebSocket 发送代码被注释掉了
+
+      // $('#message').val(''); // 清空文本框
+	  });
+	});
+</script>
+</html>

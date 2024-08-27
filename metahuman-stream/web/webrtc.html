@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- 设置页面编码为UTF-8，以支持多语言字符集 -->
+    <meta charset="UTF-8"/>
+    <!-- 设置视口属性，使页面在移动设备上能够自适应显示 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 设置页面标题 -->
+    <title>WebRTC webcam</title>
+    <!-- 内联CSS样式 -->
+    <style>
+    button {
+        padding: 8px 16px; /* 设置按钮内边距 */
+    }
+
+    video {
+        width: 100%; /* 视频宽度占据父容器的100% */
+    }
+    .option {
+        margin-bottom: 8px; /* 选项底部的外边距 */
+    }
+
+    #media {
+        max-width: 1280px; /* 媒体容器的最大宽度 */
+    }
+    </style>
+</head>
+<body>
+
+<!-- 包含一个选择是否使用STUN服务器的选项 -->
+<div class="option">
+    <input id="use-stun" type="checkbox"/> <!-- STUN服务器选项的复选框 -->
+    <label for="use-stun">Use STUN server</label> <!-- 复选框的标签 -->
+</div>
+<!-- 开始按钮，点击时触发start()函数 -->
+<button id="start" onclick="start()">Start</button>
+<!-- 停止按钮，点击时触发stop()函数，初始状态下隐藏 -->
+<button id="stop" style="display: none" onclick="stop()">Stop</button>
+
+<!-- 表单，用于发送文本消息 -->
+<form class="form-inline" id="echo-form">
+    <div class="form-group">
+      <p>input text</p> <!-- 文本框前的描述 -->
+      <!-- 文本输入区域，设置宽度和高度 -->
+      <textarea cols="2" rows="3" style="width:600px;height:50px;" class="form-control" id="message">test</textarea>
+    </div>
+    <!-- 发送按钮，点击时提交表单 -->
+    <button type="submit" class="btn btn-default">Send</button>
+  </form>
+
+<!-- 媒体容器，显示音频和视频 -->
+<div id="media">
+    <h2>Media</h2> <!-- 媒体标题 -->
+
+    <!-- 自动播放的音频元素 -->
+    <audio id="audio" autoplay="true"></audio>
+    <!-- 自动播放且内联播放（避免全屏）的视频元素 -->
+    <video id="video" style="width:600px;" autoplay="true" playsinline="true"></video>
+</div>
+
+<!-- 引入外部 JavaScript 文件 client.js -->
+<script src="client.js"></script>
+<!-- 引入 SockJS 库，用于 WebSocket 通信 -->
+<script type="text/javascript" src="http://cdn.sockjs.org/sockjs-0.3.4.js"></script>
+<!-- 引入 jQuery 库，用于简化 DOM 操作和事件处理 -->
+<script type="text/javascript" src="https://ajax.aspnetcdn.com/ajax/jquery/jquery-2.1.1.min.js"></script>
+</body>
+<script type="text/javascript" charset="utf-8">
+
+    // 当文档加载完成时执行
+    $(document).ready(function() {
+        var host = window.location.hostname; // 获取当前页面的主机名
+        var ws = new WebSocket("ws://" + host + ":8000/humanecho"); // 创建 WebSocket 连接，连接到指定的 URL
+
+        // 当 WebSocket 连接成功时触发
+        ws.onopen = function() {
+            console.log('Connected !!'); // 在控制台输出连接成功的信息
+        };
+
+        // 当收到 WebSocket 消息时触发
+        ws.onmessage = function(e) {
+            console.log('Received: ' + e.data); // 在控制台输出收到的消息数据
+            data = e; // 将收到的数据存储在 data 变量中
+            var vid = JSON.parse(data.data); // 将收到的 JSON 字符串解析为 JavaScript 对象
+            console.log(typeof(vid), vid); // 输出数据类型和内容到控制台
+
+            // 你可以使用以下行来设置视频元素的源
+            // document.getElementsByTagName("video")[0].setAttribute("src", vid["video"]);
+        };
+
+        // 当 WebSocket 连接关闭时触发
+        ws.onclose = function(e) {
+            console.log('Closed'); // 在控制台输出连接关闭的信息
+        };
+
+        // 监听表单提交事件
+        $('#echo-form').on('submit', function(e) {
+            e.preventDefault(); // 阻止表单的默认提交行为
+            var message = $('#message').val(); // 获取文本框中的消息内容
+            console.log('Sending: ' + message); // 在控制台输出发送的消息
+            ws.send(message); // 通过 WebSocket 发送消息到服务器
+            $('#message').val(''); // 清空文本框
+        });
+    });
+</script>
+</html>

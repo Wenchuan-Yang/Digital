@@ -131,7 +131,7 @@ async def offer(request):
     # 将当前sessionid对应的statreals元素设置为1
     statreals[sessionid] = 1
 
-    # 创建一个RTCPeerConnection对象
+    # 创建一个 RTCPeerConnection 对象
     pc = RTCPeerConnection()
     # 将pc对象添加到pcs集合中
     pcs.add(pc)

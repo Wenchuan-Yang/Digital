@@ -395,7 +395,7 @@ if __name__ == '__main__':
     parser.add_argument('--transport', type=str, default='webrtc') #rtmp webrtc rtcpush
     parser.add_argument('--push_url', type=str, default='http://localhost:1985/rtc/v1/whip/?app=live&stream=livestream') #rtmp://localhost/live/livestream
 
-    parser.add_argument('--max_session', type=int, default=4)  #multi session count
+    parser.add_argument('--max_session', type=int, default=2)  #multi session count
     parser.add_argument('--listenport', type=int, default=8010)
 
     opt = parser.parse_args()

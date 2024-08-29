@@ -1,105 +1,79 @@
 import asyncio
-import json
+import websockets
 import tempfile
 import subprocess
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
-import websockets
+from inference import parser, do_load, main as process
 
-async def handle_webrtc_signaling(websocket, path):
-    pc = RTCPeerConnection()
+# 初始化模型或其他资源
+args = parser.parse_args()
+do_load(args.checkpoint_path)
 
-    @pc.on("icecandidate")
-    async def on_icecandidate(candidate):
-        if candidate:
-            await websocket.send(json.dumps({
-                "type": "candidate",
-                "candidate": {
-                    'candidate': candidate.candidate,
-                    'sdpMid': candidate.sdpMid,
-                    'sdpMLineIndex': candidate.sdpMLineIndex,
-                    'usernameFragment': candidate.usernameFragment
-                }
-            }))
-
-    @pc.on("datachannel")
-    async def on_datachannel(channel):
-        @channel.on("message")
-        async def on_message(message):
-            # 假设接收到的消息是音频数据
-            if isinstance(message, bytes):
-                # 处理音频数据并生成视频片段
-                video_data = await process_audio_to_video(message)
-                # 将生成的视频片段发送回前端
-                channel.send(video_data)
-
-    while True:
-        message = await websocket.recv()
-
-        if isinstance(message, str):
-            data = json.loads(message)
-            if data["type"] == "offer":
-                await pc.setRemoteDescription(RTCSessionDescription(data["sdp"], 'offer'))
-                answer = await pc.createAnswer()
-                await pc.setLocalDescription(answer)
-                await websocket.send(json.dumps({
-                    "type": "answer",
-                    "sdp": pc.localDescription.sdp
-                }))
-            elif data["type"] == "candidate":
-                candidate = data["candidate"]
-                ice_candidate = RTCIceCandidate(
-                    sdpMid=candidate.get("sdpMid"),
-                    sdpMLineIndex=candidate.get("sdpMLineIndex"),
-                    candidate=candidate.get("candidate")
-                )
-                await pc.addIceCandidate(ice_candidate)
-
-async def process_audio_to_video(audio_data):
-    # 创建一个临时文件来保存接收到的音频数据
+async def process_audio_segment(audio_data, count):
+    # 创建临时文件来保存音频数据
     with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_audio_file:
         temp_audio_file.write(audio_data)
         temp_audio_file_path = temp_audio_file.name
 
     # 使用 ffmpeg 将 WebM 转换为 WAV
-    output_wav_file = temp_audio_file_path.replace('.webm', '.wav')
+    output_wav_file = f"temp/input_{count}.wav"
     command = [
         "ffmpeg", "-y", "-i", temp_audio_file_path, output_wav_file
     ]
     process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+    # 检查 ffmpeg 执行情况
     if process_result.returncode != 0:
         print(f"FFmpeg error: {process_result.stderr.decode()}")
         return None
 
-    # 处理音频生成视频
-    video_data = generate_video_from_audio(output_wav_file)
+    return output_wav_file
 
-    return video_data
+async def process_audio_and_return_video(websocket, path):
+    print(f" path = {path}")
+    count = 0
+    try:
+        while True:
+            # 接收音频数据
+            print(f" 开始接收数据, count = {count}")
+            audio_data = await websocket.recv()
 
-def generate_video_from_audio(audio_path):
-    # 此函数应根据实际需要生成视频
-    # 假设我们使用 ffmpeg 创建一个简单的视频
-    output_video_file = audio_path.replace('.wav', '.mp4')
-    command = [
-        "ffmpeg", "-y", "-loop", "1", "-i", "input_image.jpg", "-i", audio_path,
-        "-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac", "-b:a", "192k",
-        "-pix_fmt", "yuv420p", "-shortest", output_video_file
-    ]
-    process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print(f"接收到音频信息, type(audio_data) = {type(audio_data)}")
+            
+            # 处理音频数据并生成 wav 文件
+            audio_path = await process_audio_segment(audio_data, count)
+            if not audio_path:
+                await websocket.send("Error processing audio data.".encode('utf-8'))
+                continue
 
-    if process_result.returncode != 0:
-        print(f"FFmpeg error: {process_result.stderr.decode()}")
-        return None
+            # 处理音频并生成视频
+            print("开始处理音频并生成视频")
+            args.audio = audio_path
+            try:
+                temp_video_file = process(args, audio_path)
+            except Exception as e:
+                print(f"Video processing error: {e}")
+                await websocket.send("Error generating video.".encode('utf-8'))
+                continue
 
-    # 读取生成的视频文件并返回其内容
-    with open(output_video_file, 'rb') as video_file:
-        video_data = video_file.read()
+            # 逐块读取和发送视频数据
+            print("开始返回视频流数据")
+            with open(temp_video_file, 'rb') as video_file:
+                chunk_size = 1024 * 1024  # 1MB per chunk
+                while True:
+                    chunk = video_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    await websocket.send(chunk)
 
-    return video_data
+            count += 1
+
+    except Exception as e:
+        print(f"Error: {e}")
+        await websocket.send("Error processing audio and generating video.".encode('utf-8'))
 
 async def main():
-    async with websockets.serve(handle_webrtc_signaling, "0.0.0.0", 8000):
-        await asyncio.Future()
+    async with websockets.serve(process_audio_and_return_video, "0.0.0.0", 8000):
+        await asyncio.Future()  # 运行直到进程被终止
 
 if __name__ == "__main__":
     asyncio.run(main())
